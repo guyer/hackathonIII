@@ -1,8 +1,27 @@
-# coding: utf-8
+import argparse
+import time
+import uuid 
+
+import datreant.core as dtr
 
 import fipy as fp
 from fipy.tools.numerix import cos, sin
+from fipy.tools import parallelComm
 
+parser = argparse.ArgumentParser()
+parser.add_argument("--output", help="directory to store results in",
+                    default=str(uuid.uuid4()))
+args, unknowns = parser.parse_known_args()
+                    
+if parallelComm.procID == 0:
+    print "storing results in {0}".format(args.output)
+    data = dtr.Treant(args.output)
+else:
+    class dummyTreant(object):
+        categories = dict()
+        
+    data = dummyTreant()
+    
 mesh = fp.Grid2D(nx=100, ny=100)
 
 c = fp.CellVariable(mesh=mesh, name="$c$", hasOld=True)
@@ -55,15 +74,31 @@ c.setValue(c0 + c1 * (cos(0.2*x) * cos(0.11*y)
                       + cos(0.025*x - 0.15*y) * (cos(0.07*x - 0.02*y))))
 Phi.setValue(0.)
 
-viewer = fp.Viewer(vars=(c, Phi))
-viewer.plot()
+synchTimes = [5, 10, 20, 40, 100, 200, 400, 1000]
+synchTimes.reverse()
 
-for t in range(95000):
+t = 0.
+dt = 1.
+
+while True:
     c.updateOld()
     psi.updateOld()
     Phi.updateOld()
+
+    synchTime = synchTimes.pop()
+    dt_synch = synchTime - t
+    dt_save = dt
+    if dt_synch < dt:
+        dt = dt_synch
+    elif dt_synch > dt:
+        synchTimes.append(synchTime)
+    t += dt
+    
     for sweep in range(1):
-        res = eq.sweep(dt=.1) #, solver=fp.LinearGMRESSolver(precon=fp.JacobiPreconditioner()))
-#        print t, sweep, res # , c.cellVolumeAverage
-    print t, c.cellVolumeAverage
-    viewer.plot()
+        res = eq.sweep(dt=dt) #, solver=fp.LinearGMRESSolver(precon=fp.JacobiPreconditioner()))
+
+    if dt_synch == dt:
+        fp.tools.dump.write((c, Phi), 
+                            filename=data["t={}.tar.gz".format(t)].make().abspath)
+                            
+    dt = dt_save
