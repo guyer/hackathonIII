@@ -47,16 +47,7 @@ k = 0.09
 epsilon = 9.
 
 
-# Boundary condition is stipulated as $\nabla c \cdot \hat{n} = 0$, which is not no-flux. Constraining c.faceGrad to zero seems to do nothing, so we impose a flux constraint on the remainder of the flux (assuming that $\nabla^3 c \cdot \hat{n} = 0$). Thus,
-# \begin{align*}
-# \vec{J} &= M\nabla\left(\frac{\partial^2 f_{chem}}{\partial c^2}\nabla c - \kappa \nabla^2 c + k \Phi\right) 
-# \\
-# &\approx M\nabla\left(k \Phi\right) 
-# \end{align*}
-# on exterior faces.
-
-c_BC = (M*k*Phi.faceGrad*mesh.exteriorFaces).divergence
-ceq = fp.TransientTerm(var=c) == fp.DiffusionTerm(coeff=M, var=psi) + c_BC
+ceq = fp.TransientTerm(var=c) == fp.DiffusionTerm(coeff=M, var=psi)
 
 fchem = rho * (c - calpha)**2 * (cbeta - c)**2
 felec = k * c * Phi / 2.
