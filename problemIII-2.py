@@ -1,6 +1,9 @@
+import os
 import argparse
 import time
 import uuid 
+
+import numpy as np
 
 import datreant.core as dtr
 
@@ -11,6 +14,8 @@ from fipy.tools import parallelComm
 parser = argparse.ArgumentParser()
 parser.add_argument("--output", help="directory to store results in",
                     default=str(uuid.uuid4()))
+parser.add_argument("--sweeps", help="number of nonlinear sweeps to take",
+                    type=int, default=10)
 args, unknowns = parser.parse_known_args()
                     
 if parallelComm.procID == 0:
@@ -22,7 +27,12 @@ else:
         
     data = dummyTreant()
     
+data.categories['sweeps'] = args.sweeps
+data.categories['commit'] = os.popen('git log --pretty="%H" -1').read().strip()
+data.categories['diff'] = os.popen('git diff').read()
+    
 mesh = fp.Grid2D(nx=100, ny=100)
+volumes = fp.CellVariable(mesh=mesh, value=mesh.cellVolumes)
 
 c = fp.CellVariable(mesh=mesh, name="$c$", hasOld=True)
 psi = fp.CellVariable(mesh=mesh, name=r"$\psi$", hasOld=True)
@@ -48,13 +58,17 @@ epsilon = 9.
 c_BC = (M*k*Phi.faceGrad*mesh.exteriorFaces).divergence
 ceq = fp.TransientTerm(var=c) == fp.DiffusionTerm(coeff=M, var=psi) + c_BC
 
-
+fchem = rho * (c - calpha)**2 * (cbeta - c)**2
+felec = k * c * Phi / 2.
+f = fchem + (kappa/2.) * c.grad.mag**2 + felec
 dfchemdc = 2 * rho * (c - calpha) * (cbeta - c) * (calpha + cbeta - 2 * c)
 d2fchemd2c = 2 * rho * ((calpha + cbeta - 2 * c)**2 - 2 * (c - calpha) * (cbeta - c))
 psieq = (fp.ImplicitSourceTerm(coeff=1., var=psi) 
          == fp.ImplicitSourceTerm(coeff=d2fchemd2c, var=c) - d2fchemd2c * c + dfchemdc
          - fp.DiffusionTerm(coeff=kappa, var=c)
          + fp.ImplicitSourceTerm(coeff=k, var=Phi))
+         
+stats = []
 
 Phieq = fp.DiffusionTerm(var=Phi) == 0. # fp.ImplicitSourceTerm(coeff=-k/epsilon, var=c)
 
@@ -80,12 +94,17 @@ synchTimes.reverse()
 t = 0.
 dt = 1.
 
+start = time.clock()
+
 while True:
     c.updateOld()
     psi.updateOld()
     Phi.updateOld()
 
-    synchTime = synchTimes.pop()
+    try:
+        synchTime = synchTimes.pop()
+    except IndexError:
+        break
     dt_synch = synchTime - t
     dt_save = dt
     if dt_synch < dt:
@@ -94,7 +113,7 @@ while True:
         synchTimes.append(synchTime)
     t += dt
     
-    for sweep in range(1):
+    for sweep in range(args.sweeps):
         res = eq.sweep(dt=dt) #, solver=fp.LinearGMRESSolver(precon=fp.JacobiPreconditioner()))
 
     if dt_synch == dt:
@@ -102,3 +121,10 @@ while True:
                             filename=data["t={}.tar.gz".format(t)].make().abspath)
                             
     dt = dt_save
+
+    stats.append((t, (f.cellVolumeAverage * mesh.numberOfCells).value))
+    fp.numerix.save(data['stats.npy'].make().abspath, 
+                    fp.numerix.array(stats, 
+                                     dtype=[('time', float), ('energy', float)]))
+    
+data.categories['elapsed'] = time.clock() - start
