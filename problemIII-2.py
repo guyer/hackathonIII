@@ -70,7 +70,7 @@ psieq = (fp.ImplicitSourceTerm(coeff=1., var=psi)
          
 stats = []
 
-Phieq = fp.DiffusionTerm(var=Phi) == 0. # fp.ImplicitSourceTerm(coeff=-k/epsilon, var=c)
+Phieq = fp.DiffusionTerm(var=Phi) == fp.ImplicitSourceTerm(coeff=-k/epsilon, var=c)
 
 eq = ceq & psieq & Phieq
 
