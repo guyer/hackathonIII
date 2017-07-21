@@ -1,4 +1,5 @@
 import os
+import sys
 import argparse
 import time
 import uuid 
@@ -27,6 +28,7 @@ else:
         
     data = dummyTreant()
     
+data.categories['args'] = " ".join(sys.argv)
 data.categories['sweeps'] = args.sweeps
 data.categories['commit'] = os.popen('git log --pretty="%H" -1').read().strip()
 data.categories['diff'] = os.popen('git diff').read()
