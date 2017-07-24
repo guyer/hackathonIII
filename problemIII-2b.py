@@ -1,0 +1,150 @@
+import os
+import sys
+import argparse
+import time
+import uuid 
+
+import numpy as np
+
+import datreant.core as dtr
+
+import fipy as fp
+from fipy.tools.numerix import cos, sin
+from fipy.tools import parallelComm
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--output", help="directory to store results in",
+                    default=str(uuid.uuid4()))
+parser.add_argument("--sweeps", help="number of nonlinear sweeps to take",
+                    type=int, default=10)
+args, unknowns = parser.parse_known_args()
+                    
+if parallelComm.procID == 0:
+    print "storing results in {0}".format(args.output)
+    data = dtr.Treant(args.output)
+else:
+    class dummyTreant(object):
+        categories = dict()
+        
+    data = dummyTreant()
+    
+data.categories['args'] = " ".join(sys.argv)
+data.categories['sweeps'] = args.sweeps
+data.categories['commit'] = os.popen('git log --pretty="%H" -1').read().strip()
+data.categories['diff'] = os.popen('git diff').read()
+    
+mesh = fp.Gmsh2D('''
+cellSize = 1;
+                 
+Point(1) = {0, 0, 0, cellSize};
+Point(2) = {50, 0, 0, cellSize};
+Point(3) = {50, 100, 0, cellSize};
+Point(4) = {0, 100, 0, cellSize};
+Point(5) = {50, 50, 0, cellSize};
+                 
+Line(1) = {1, 2};
+Circle(2) = {2, 5, 3};
+Line(3) = {3, 4};
+Line(4) = {4, 1};
+                 
+Line Loop(5) = {1, 2, 3, 4};
+Plane Surface(6) = {5};
+       
+Physical Surface("cells") = {6};
+                 
+Physical Line("bottom") = {1};
+Physical Line("right") = {2};
+Physical Line("top") = {3};
+Physical Line("left") = {4};
+''')
+
+volumes = fp.CellVariable(mesh=mesh, value=mesh.cellVolumes)
+
+c = fp.CellVariable(mesh=mesh, name="$c$", hasOld=True)
+psi = fp.CellVariable(mesh=mesh, name=r"$\psi$", hasOld=True)
+Phi = fp.CellVariable(mesh=mesh, name=r"$\Phi$", hasOld=True)
+
+calpha = 0.3
+cbeta = 0.7
+kappa = 2.
+rho = 5.
+M = 5.
+k = 0.09
+epsilon = 9.
+
+
+ceq = fp.TransientTerm(var=c) == fp.DiffusionTerm(coeff=M, var=psi)
+
+fchem = rho * (c - calpha)**2 * (cbeta - c)**2
+felec = k * c * Phi / 2.
+f = fchem + (kappa/2.) * c.grad.mag**2 + felec
+dfchemdc = 2 * rho * (c - calpha) * (cbeta - c) * (calpha + cbeta - 2 * c)
+d2fchemd2c = 2 * rho * ((calpha + cbeta - 2 * c)**2 - 2 * (c - calpha) * (cbeta - c))
+psieq = (fp.ImplicitSourceTerm(coeff=1., var=psi) 
+         == fp.ImplicitSourceTerm(coeff=d2fchemd2c, var=c) - d2fchemd2c * c + dfchemdc
+         - fp.DiffusionTerm(coeff=kappa, var=c)
+         + fp.ImplicitSourceTerm(coeff=k, var=Phi))
+         
+stats = []
+
+Phieq = fp.DiffusionTerm(var=Phi) == fp.ImplicitSourceTerm(coeff=-k/epsilon, var=c)
+
+eq = ceq & psieq & Phieq
+
+x, y = mesh.cellCenters
+X, Y = mesh.faceCenters
+
+Phi.faceGrad.constrain(0., where=mesh.physicalFaces["top"] | mesh.physicalFaces["bottom"])
+Phi.constrain(0., where=mesh.physicalFaces["left"])
+Phi.constrain(sin(Y/7.), where=mesh.physicalFaces["right"])
+
+c0 = 0.5
+c1 = 0.04
+c.setValue(c0 + c1 * (cos(0.2*x) * cos(0.11*y) 
+                      + (cos(0.13*x) * cos(0.087*y))**2 
+                      + cos(0.025*x - 0.15*y) * (cos(0.07*x - 0.02*y))))
+Phi.setValue(0.)
+
+synchTimes = [1, 2, 4, 8, 16, 32, 64, 128]
+synchTimes.reverse()
+
+t = 0.
+dt = 1.
+
+fp.tools.dump.write((c, Phi), 
+                    filename=data["t={}.tar.gz".format(0)].make().abspath)
+
+start = time.clock()
+
+while True:
+    c.updateOld()
+    psi.updateOld()
+    Phi.updateOld()
+
+    try:
+        synchTime = synchTimes.pop()
+    except IndexError:
+        break
+    dt_synch = synchTime - t
+    dt_save = dt
+    if dt_synch < dt:
+        dt = dt_synch
+    elif dt_synch > dt:
+        synchTimes.append(synchTime)
+    t += dt
+    
+    for sweep in range(args.sweeps):
+        res = eq.sweep(dt=dt) #, solver=fp.LinearGMRESSolver(precon=fp.JacobiPreconditioner()))
+
+    if dt_synch == dt:
+        fp.tools.dump.write((c, Phi), 
+                            filename=data["t={}.tar.gz".format(t)].make().abspath)
+                            
+    dt = dt_save
+
+    stats.append((t, (f.cellVolumeAverage * mesh.numberOfCells).value))
+    fp.numerix.save(data['stats.npy'].make().abspath, 
+                    fp.numerix.array(stats, 
+                                     dtype=[('time', float), ('energy', float)]))
+    
+data.categories['elapsed'] = time.clock() - start
