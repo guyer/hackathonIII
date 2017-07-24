@@ -81,7 +81,7 @@ c.setValue(c0 + c1 * (cos(0.2*x) * cos(0.11*y)
                       + cos(0.025*x - 0.15*y) * (cos(0.07*x - 0.02*y))))
 Phi.setValue(0.)
 
-synchTimes = [5, 10, 20, 40, 100, 200, 400, 1000]
+synchTimes = [1, 2, 4, 8, 16, 32, 64, 128]
 synchTimes.reverse()
 
 t = 0.
