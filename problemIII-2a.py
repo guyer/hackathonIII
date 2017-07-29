@@ -106,20 +106,22 @@ while True:
     elif dt_synch > dt:
         synchTimes.append(synchTime)
         
-    if dt_synch == dt:
-        fp.tools.dump.write((c, Phi), 
-                            filename=data["t={}.tar.gz".format(t)].make().abspath)
-                            
     t += dt
     
     for sweep in range(args.sweeps):
         res = eq.sweep(dt=dt) #, solver=fp.LinearGMRESSolver(precon=fp.JacobiPreconditioner()))
 
     dt = dt_save
-
+    
+    if dt_synch == dt:
+        fp.tools.dump.write((c, Phi), 
+                            filename=data["t={}.tar.gz".format(t)].make().abspath)
+                            
     stats.append((t, (f.cellVolumeAverage * mesh.numberOfCells).value))
     fp.numerix.save(data['stats.npy'].make().abspath, 
                     fp.numerix.array(stats, 
                                      dtype=[('time', float), ('energy', float)]))
-    
+
+
+
 data.categories['elapsed'] = time.clock() - start
