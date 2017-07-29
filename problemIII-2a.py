@@ -105,15 +105,16 @@ while True:
         dt = dt_synch
     elif dt_synch > dt:
         synchTimes.append(synchTime)
+        
+    if dt_synch == dt:
+        fp.tools.dump.write((c, Phi), 
+                            filename=data["t={}.tar.gz".format(t)].make().abspath)
+                            
     t += dt
     
     for sweep in range(args.sweeps):
         res = eq.sweep(dt=dt) #, solver=fp.LinearGMRESSolver(precon=fp.JacobiPreconditioner()))
 
-    if dt_synch == dt:
-        fp.tools.dump.write((c, Phi), 
-                            filename=data["t={}.tar.gz".format(t)].make().abspath)
-                            
     dt = dt_save
 
     stats.append((t, (f.cellVolumeAverage * mesh.numberOfCells).value))
