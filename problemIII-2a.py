@@ -92,8 +92,6 @@ def saveData(t, dt, dt_synch):
         fp.tools.dump.write((c, Phi), 
                             filename=data["t={}.tar.gz".format(t)].make().abspath)
                             
-    dt = dt_save
-
     stats.append((t, (f.cellVolumeAverage * mesh.numberOfCells).value))
     fp.numerix.save(data['stats.npy'].make().abspath, 
                     fp.numerix.array(stats, 
