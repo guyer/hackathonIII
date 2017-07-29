@@ -20,8 +20,9 @@ parser.add_argument("--sweeps", help="number of nonlinear sweeps to take",
 args, unknowns = parser.parse_known_args()
                     
 if parallelComm.procID == 0:
-    print "storing results in {0}".format(args.output)
-    data = dtr.Treant(args.output)
+    path = os.path.join("Data", args.output)
+    print "storing results in {0}".format(path)
+    data = dtr.Treant(path)
 else:
     class dummyTreant(object):
         categories = dict()
@@ -46,7 +47,7 @@ kappa = 2.
 rho = 5.
 M = 5.
 k = 0.09
-epsilon = 9.
+epsilon = 90.
 
 
 ceq = fp.TransientTerm(var=c) == fp.DiffusionTerm(coeff=M, var=psi)
@@ -81,7 +82,7 @@ c.setValue(c0 + c1 * (cos(0.2*x) * cos(0.11*y)
                       + cos(0.025*x - 0.15*y) * (cos(0.07*x - 0.02*y))))
 Phi.setValue(0.)
 
-synchTimes = [1, 2, 4, 8, 16, 32, 64, 128]
+synchTimes = fp.numerix.arange(0, 1001, 5).tolist()
 synchTimes.reverse()
 
 t = 0.
