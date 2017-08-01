@@ -85,7 +85,7 @@ c.setValue(c0 + c1 * (cos(0.2*x) * cos(0.11*y)
                       + cos(0.025*x - 0.15*y) * (cos(0.07*x - 0.02*y))))
 Phi.setValue(0.)
 
-synchTimes = fp.numerix.arange(0, 1001, 5).tolist()
+synchTimes = [0, 5, 10, 20, 50, 100, 200, 400, 1000]
 synchTimes.reverse()
 
 t = synchTimes.pop()

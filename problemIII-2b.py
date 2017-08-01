@@ -17,11 +17,14 @@ parser.add_argument("--output", help="directory to store results in",
                     default=str(uuid.uuid4()))
 parser.add_argument("--sweeps", help="number of nonlinear sweeps to take",
                     type=int, default=10)
+parser.add_argument("--step", help="time step to attempt",
+                    type=float, default=10.)
 args, unknowns = parser.parse_known_args()
                     
 if parallelComm.procID == 0:
-    print "storing results in {0}".format(args.output)
-    data = dtr.Treant(args.output)
+    path = os.path.join("Data", args.output)
+    print "storing results in {0}".format(path)
+    data = dtr.Treant(path)
 else:
     class dummyTreant(object):
         categories = dict()
@@ -29,6 +32,7 @@ else:
     data = dummyTreant()
     
 data.categories['args'] = " ".join(sys.argv)
+data.categories['step'] = args.step
 data.categories['sweeps'] = args.sweeps
 data.categories['commit'] = os.popen('git log --pretty="%H" -1').read().strip()
 data.categories['diff'] = os.popen('git diff').read()
@@ -70,7 +74,7 @@ kappa = 2.
 rho = 5.
 M = 5.
 k = 0.09
-epsilon = 9.
+epsilon = 90.
 
 
 ceq = fp.TransientTerm(var=c) == fp.DiffusionTerm(coeff=M, var=psi)
@@ -105,14 +109,23 @@ c.setValue(c0 + c1 * (cos(0.2*x) * cos(0.11*y)
                       + cos(0.025*x - 0.15*y) * (cos(0.07*x - 0.02*y))))
 Phi.setValue(0.)
 
-synchTimes = [1, 2, 4, 8, 16, 32, 64, 128]
+synchTimes = [0, 5, 10, 20, 50, 100, 200, 400, 1000]
 synchTimes.reverse()
 
-t = 0.
-dt = 1.
+t = synchTimes.pop()
 
-fp.tools.dump.write((c, Phi), 
-                    filename=data["t={}.tar.gz".format(0)].make().abspath)
+def saveData(t, dt, dt_synch):
+    if dt_synch == dt:
+        fp.tools.dump.write((c, Phi), 
+                            filename=data["t={}.tar.gz".format(t)].make().abspath)
+                            
+    stats.append((t, (f.cellVolumeAverage * mesh.numberOfCells).value))
+    fp.numerix.save(data['stats.npy'].make().abspath, 
+                    fp.numerix.array(stats, 
+                                     dtype=[('time', float), ('energy', float)]))
+
+dt = args.step
+saveData(t, dt, dt)
 
 start = time.clock()
 
@@ -136,15 +149,8 @@ while True:
     for sweep in range(args.sweeps):
         res = eq.sweep(dt=dt) #, solver=fp.LinearGMRESSolver(precon=fp.JacobiPreconditioner()))
 
-    if dt_synch == dt:
-        fp.tools.dump.write((c, Phi), 
-                            filename=data["t={}.tar.gz".format(t)].make().abspath)
-                            
+    saveData(t, dt, dt_synch)
+    
     dt = dt_save
-
-    stats.append((t, (f.cellVolumeAverage * mesh.numberOfCells).value))
-    fp.numerix.save(data['stats.npy'].make().abspath, 
-                    fp.numerix.array(stats, 
-                                     dtype=[('time', float), ('energy', float)]))
     
 data.categories['elapsed'] = time.clock() - start
