@@ -41,7 +41,7 @@ data.categories['dx'] = args.dx
 data.categories['commit'] = os.popen('git log --pretty="%H" -1').read().strip()
 data.categories['diff'] = os.popen('git diff').read()
     
-mesh = fp.Grid2D(Lx=100, dx=args.dx, Ly=100, dy=args.dx)
+mesh = fp.Grid2D(Lx=100., dx=args.dx, Ly=100., dy=args.dx)
 volumes = fp.CellVariable(mesh=mesh, value=mesh.cellVolumes)
 
 c = fp.CellVariable(mesh=mesh, name="$c$", hasOld=True)
