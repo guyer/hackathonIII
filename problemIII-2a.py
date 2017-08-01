@@ -17,6 +17,8 @@ parser.add_argument("--output", help="directory to store results in",
                     default=str(uuid.uuid4()))
 parser.add_argument("--sweeps", help="number of nonlinear sweeps to take",
                     type=int, default=10)
+parser.add_argument("--step", help="time step to attempt",
+                    type=float, default=10.)
 args, unknowns = parser.parse_known_args()
                     
 if parallelComm.procID == 0:
@@ -30,6 +32,7 @@ else:
     data = dummyTreant()
     
 data.categories['args'] = " ".join(sys.argv)
+data.categories['step'] = args.step
 data.categories['sweeps'] = args.sweeps
 data.categories['commit'] = os.popen('git log --pretty="%H" -1').read().strip()
 data.categories['diff'] = os.popen('git diff').read()
@@ -97,7 +100,7 @@ def saveData(t, dt, dt_synch):
                     fp.numerix.array(stats, 
                                      dtype=[('time', float), ('energy', float)]))
 
-dt = 1.
+dt = args.step
 saveData(t, dt, dt)
 
 start = time.clock()
