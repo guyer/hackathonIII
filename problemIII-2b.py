@@ -19,6 +19,8 @@ parser.add_argument("--sweeps", help="number of nonlinear sweeps to take",
                     type=int, default=10)
 parser.add_argument("--step", help="time step to attempt",
                     type=float, default=10.)
+parser.add_argument("--cellSize", help="cell size",
+                    type=float, default=1.)
 args, unknowns = parser.parse_known_args()
                     
 if parallelComm.procID == 0:
@@ -31,14 +33,16 @@ else:
         
     data = dummyTreant()
     
+data.categories['problem'] = "III-2b"
 data.categories['args'] = " ".join(sys.argv)
 data.categories['step'] = args.step
 data.categories['sweeps'] = args.sweeps
+data.categories['cellSize'] = args.cellSize
 data.categories['commit'] = os.popen('git log --pretty="%H" -1').read().strip()
 data.categories['diff'] = os.popen('git diff').read()
     
 mesh = fp.Gmsh2D('''
-cellSize = 1;
+cellSize = %(cellSize)g;
                  
 Point(1) = {0, 0, 0, cellSize};
 Point(2) = {50, 0, 0, cellSize};
@@ -60,7 +64,7 @@ Physical Line("bottom") = {1};
 Physical Line("right") = {2};
 Physical Line("top") = {3};
 Physical Line("left") = {4};
-''')
+''' % dict(cellSize=args.cellSize))
 
 volumes = fp.CellVariable(mesh=mesh, value=mesh.cellVolumes)
 

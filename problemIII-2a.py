@@ -19,6 +19,8 @@ parser.add_argument("--sweeps", help="number of nonlinear sweeps to take",
                     type=int, default=10)
 parser.add_argument("--step", help="time step to attempt",
                     type=float, default=10.)
+parser.add_argument("--dx", help="cell spacing",
+                    type=float, default=1.)
 args, unknowns = parser.parse_known_args()
                     
 if parallelComm.procID == 0:
@@ -31,13 +33,15 @@ else:
         
     data = dummyTreant()
     
+data.categories['problem'] = "III-2a"
 data.categories['args'] = " ".join(sys.argv)
 data.categories['step'] = args.step
 data.categories['sweeps'] = args.sweeps
+data.categories['dx'] = args.dx
 data.categories['commit'] = os.popen('git log --pretty="%H" -1').read().strip()
 data.categories['diff'] = os.popen('git diff').read()
     
-mesh = fp.Grid2D(nx=100, ny=100)
+mesh = fp.Grid2D(Lx=100, dx=args.dx, Ly=100, dy=args.dx)
 volumes = fp.CellVariable(mesh=mesh, value=mesh.cellVolumes)
 
 c = fp.CellVariable(mesh=mesh, name="$c$", hasOld=True)
